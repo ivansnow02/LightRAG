@@ -2,59 +2,60 @@
 LightRAG FastAPI Server
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
 import asyncio
-import os
+import configparser
 import logging
 import logging.config
-import uvicorn
-import pipmaster as pm
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-from pathlib import Path
-import configparser
-from ascii_colors import ASCIIColors
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
-from lightrag.api.utils_api import (
-    get_combined_auth_dependency,
-    display_splash_screen,
-    check_env_file,
-)
-from .config import (
-    global_args,
-    update_uvicorn_mode_config,
-    get_default_host,
-)
-from lightrag.utils import get_env_value
+import os
 import sys
-from lightrag import LightRAG, __version__ as core_version
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import pipmaster as pm
+import uvicorn
+from ascii_colors import ASCIIColors
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+
+from lightrag import LightRAG
+from lightrag import __version__ as core_version
 from lightrag.api import __api_version__
-from lightrag.types import GPTKeywordExtractionFormat
-from lightrag.utils import EmbeddingFunc
-from lightrag.constants import (
-    DEFAULT_LOG_MAX_BYTES,
-    DEFAULT_LOG_BACKUP_COUNT,
-    DEFAULT_LOG_FILENAME,
-)
+from lightrag.api.auth import auth_handler
 from lightrag.api.routers.document_routes import (
     DocumentManager,
     create_document_routes,
     run_scanning_process,
 )
-from lightrag.api.routers.query_routes import create_query_routes
 from lightrag.api.routers.graph_routes import create_graph_routes
 from lightrag.api.routers.ollama_api import OllamaAPI
-
-from lightrag.utils import logger, set_verbose_debug
+from lightrag.api.routers.query_routes import create_query_routes
+from lightrag.api.utils_api import (
+    check_env_file,
+    display_splash_screen,
+    get_combined_auth_dependency,
+)
+from lightrag.constants import (
+    DEFAULT_LOG_BACKUP_COUNT,
+    DEFAULT_LOG_FILENAME,
+    DEFAULT_LOG_MAX_BYTES,
+)
 from lightrag.kg.shared_storage import (
     get_namespace_data,
     get_pipeline_status_lock,
     initialize_pipeline_status,
 )
-from fastapi.security import OAuth2PasswordRequestForm
-from lightrag.api.auth import auth_handler
+from lightrag.types import GPTKeywordExtractionFormat
+from lightrag.utils import EmbeddingFunc, get_env_value, logger, set_verbose_debug
+
+from lightrag.api.config import (
+    get_default_host,
+    global_args,
+    update_uvicorn_mode_config,
+)
 
 # use the .env that is inside the current folder
 # allows to use different .env file for each lightrag instance
@@ -85,10 +86,11 @@ def create_app(args):
         "openai",
         "openai-ollama",
         "azure_openai",
+        "langchain_gemini"
     ]:
         raise Exception("llm binding not supported")
 
-    if args.embedding_binding not in ["lollms", "ollama", "openai", "azure_openai"]:
+    if args.embedding_binding not in ["lollms", "ollama", "openai", "azure_openai", "hf-st"]:
         raise Exception("embedding binding not supported")
 
     # Set default hosts if not provided
@@ -199,9 +201,9 @@ def create_app(args):
     # Create working directory if it doesn't exist
     Path(args.working_dir).mkdir(parents=True, exist_ok=True)
     if args.llm_binding == "lollms" or args.embedding_binding == "lollms":
-        from lightrag.llm.lollms import lollms_model_complete, lollms_embed
+        from lightrag.llm.lollms import lollms_embed, lollms_model_complete
     if args.llm_binding == "ollama" or args.embedding_binding == "ollama":
-        from lightrag.llm.ollama import ollama_model_complete, ollama_embed
+        from lightrag.llm.ollama import ollama_embed, ollama_model_complete
     if args.llm_binding == "openai" or args.embedding_binding == "openai":
         from lightrag.llm.openai import openai_complete_if_cache, openai_embed
     if args.llm_binding == "azure_openai" or args.embedding_binding == "azure_openai":
@@ -209,9 +211,11 @@ def create_app(args):
             azure_openai_complete_if_cache,
             azure_openai_embed,
         )
+    if args.llm_binding == "langchain_gemini":
+        from lightrag.llm.langchain_gemini import langchain_gemini_complete
     if args.llm_binding_host == "openai-ollama" or args.embedding_binding == "ollama":
-        from lightrag.llm.openai import openai_complete_if_cache
         from lightrag.llm.ollama import ollama_embed
+        from lightrag.llm.openai import openai_complete_if_cache
 
     async def openai_alike_model_complete(
         prompt,
@@ -260,99 +264,131 @@ def create_app(args):
             **kwargs,
         )
 
-    embedding_func = EmbeddingFunc(
-        embedding_dim=args.embedding_dim,
-        max_token_size=args.max_embed_tokens,
-        func=lambda texts: lollms_embed(
-            texts,
-            embed_model=args.embedding_model,
-            host=args.embedding_binding_host,
-            api_key=args.embedding_binding_api_key,
+    # 支持多种embedding后端，包括hf
+    if args.embedding_binding == "lollms":
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: lollms_embed(
+                texts,
+                embed_model=args.embedding_model,
+                host=args.embedding_binding_host,
+                api_key=args.embedding_binding_api_key,
+            ),
         )
-        if args.embedding_binding == "lollms"
-        else ollama_embed(
-            texts,
-            embed_model=args.embedding_model,
-            host=args.embedding_binding_host,
-            api_key=args.embedding_binding_api_key,
+    elif args.embedding_binding == "ollama":
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: ollama_embed(
+                texts,
+                embed_model=args.embedding_model,
+                host=args.embedding_binding_host,
+                api_key=args.embedding_binding_api_key,
+            ),
         )
-        if args.embedding_binding == "ollama"
-        else azure_openai_embed(
-            texts,
-            model=args.embedding_model,  # no host is used for openai,
-            api_key=args.embedding_binding_api_key,
+    elif args.embedding_binding == "azure_openai":
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: azure_openai_embed(
+                texts,
+                model=args.embedding_model,
+                api_key=args.embedding_binding_api_key,
+            ),
         )
-        if args.embedding_binding == "azure_openai"
-        else openai_embed(
-            texts,
-            model=args.embedding_model,
-            base_url=args.embedding_binding_host,
-            api_key=args.embedding_binding_api_key,
-        ),
-    )
+    elif args.embedding_binding == "openai":
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: openai_embed(
+                texts,
+                model=args.embedding_model,
+                base_url=args.embedding_binding_host,
+                api_key=args.embedding_binding_api_key,
+            ),
+        )
+    elif args.embedding_binding == "hf":
+        # HuggingFace embedding
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: hf_embed(
+                texts,
+                tokenizer=AutoTokenizer.from_pretrained(args.embedding_model),
+                embed_model=AutoModel.from_pretrained(args.embedding_model),
+            ),
+        )
+    elif args.embedding_binding == "hf-st":
+        # HuggingFace Sentence Transformers embedding
+        from lightrag.llm.hf import hf_st_embed
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: hf_st_embed(
+                texts,
+                model_name=args.embedding_model,
+            ),
+        )
+    else:
+        # fallback: openai
+        embedding_func = EmbeddingFunc(
+            embedding_dim=args.embedding_dim,
+            max_token_size=args.max_embed_tokens,
+            func=lambda texts: openai_embed(
+                texts,
+                model=args.embedding_model,
+                base_url=args.embedding_binding_host,
+                api_key=args.embedding_binding_api_key,
+            ),
+        )
 
-    # Initialize RAG
-    if args.llm_binding in ["lollms", "ollama", "openai"]:
-        rag = LightRAG(
-            working_dir=args.working_dir,
-            llm_model_func=lollms_model_complete
-            if args.llm_binding == "lollms"
-            else ollama_model_complete
-            if args.llm_binding == "ollama"
-            else openai_alike_model_complete,
-            llm_model_name=args.llm_model,
-            llm_model_max_async=args.max_async,
-            llm_model_max_token_size=args.max_tokens,
-            chunk_token_size=int(args.chunk_size),
-            chunk_overlap_token_size=int(args.chunk_overlap_size),
-            llm_model_kwargs={
-                "host": args.llm_binding_host,
-                "timeout": args.timeout,
-                "options": {"num_ctx": args.max_tokens},
-                "api_key": args.llm_binding_api_key,
-            }
-            if args.llm_binding == "lollms" or args.llm_binding == "ollama"
-            else {},
-            embedding_func=embedding_func,
-            kv_storage=args.kv_storage,
-            graph_storage=args.graph_storage,
-            vector_storage=args.vector_storage,
-            doc_status_storage=args.doc_status_storage,
-            vector_db_storage_cls_kwargs={
-                "cosine_better_than_threshold": args.cosine_threshold
-            },
-            enable_llm_cache_for_entity_extract=args.enable_llm_cache_for_extract,
-            enable_llm_cache=args.enable_llm_cache,
-            auto_manage_storages_states=False,
-            max_parallel_insert=args.max_parallel_insert,
-            addon_params={"language": args.summary_language},
-        )
-    else:  # azure_openai
-        rag = LightRAG(
-            working_dir=args.working_dir,
-            llm_model_func=azure_openai_model_complete,
-            chunk_token_size=int(args.chunk_size),
-            chunk_overlap_token_size=int(args.chunk_overlap_size),
-            llm_model_kwargs={
-                "timeout": args.timeout,
-            },
-            llm_model_name=args.llm_model,
-            llm_model_max_async=args.max_async,
-            llm_model_max_token_size=args.max_tokens,
-            embedding_func=embedding_func,
-            kv_storage=args.kv_storage,
-            graph_storage=args.graph_storage,
-            vector_storage=args.vector_storage,
-            doc_status_storage=args.doc_status_storage,
-            vector_db_storage_cls_kwargs={
-                "cosine_better_than_threshold": args.cosine_threshold
-            },
-            enable_llm_cache_for_entity_extract=args.enable_llm_cache_for_extract,
-            enable_llm_cache=args.enable_llm_cache,
-            auto_manage_storages_states=False,
-            max_parallel_insert=args.max_parallel_insert,
-            addon_params={"language": args.summary_language},
-        )
+    # 支持多种llm后端，包括langchain_gemini
+    if args.llm_binding == "lollms":
+        llm_func = lollms_model_complete
+    elif args.llm_binding == "ollama":
+        llm_func = ollama_model_complete
+    elif args.llm_binding == "openai":
+        llm_func = openai_alike_model_complete
+    elif args.llm_binding == "azure_openai":
+        llm_func = azure_openai_model_complete
+    elif args.llm_binding == "langchain_gemini":
+        llm_func = langchain_gemini_complete
+    else:
+        llm_func = openai_alike_model_complete
+
+    rag = LightRAG(
+        working_dir=args.working_dir,
+        llm_model_func=llm_func,
+        llm_model_name=args.llm_model,
+        llm_model_max_async=args.max_async,
+        llm_model_max_token_size=args.max_tokens,
+        chunk_token_size=int(args.chunk_size),
+        chunk_overlap_token_size=int(args.chunk_overlap_size),
+        llm_model_kwargs={
+            "host": args.llm_binding_host,
+            "timeout": args.timeout,
+            "options": {"num_ctx": args.max_tokens},
+            "api_key": args.llm_binding_api_key,
+        }
+        if args.llm_binding in ["lollms", "ollama"]
+        else {"timeout": args.timeout}
+        if args.llm_binding == "azure_openai"
+        else {},
+        embedding_func=embedding_func,
+        kv_storage=args.kv_storage,
+        graph_storage=args.graph_storage,
+        vector_storage=args.vector_storage,
+        doc_status_storage=args.doc_status_storage,
+        vector_db_storage_cls_kwargs={
+            "cosine_better_than_threshold": args.cosine_threshold
+        },
+        enable_llm_cache_for_entity_extract=args.enable_llm_cache_for_extract,
+        enable_llm_cache=args.enable_llm_cache,
+        auto_manage_storages_states=False,
+        max_parallel_insert=args.max_parallel_insert,
+        addon_params={"language": args.summary_language},
+    )
 
     # Add routes
     app.include_router(create_document_routes(rag, doc_manager, api_key))
@@ -546,65 +582,63 @@ def configure_logging():
     log_max_bytes = get_env_value("LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES, int)
     log_backup_count = get_env_value("LOG_BACKUP_COUNT", DEFAULT_LOG_BACKUP_COUNT, int)
 
-    logging.config.dictConfig(
-        {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(levelname)s: %(message)s",
-                },
-                "detailed": {
-                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                },
+    logging.config.dictConfig({
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(levelname)s: %(message)s",
             },
-            "handlers": {
-                "console": {
-                    "formatter": "default",
-                    "class": "logging.StreamHandler",
-                    "stream": "ext://sys.stderr",
-                },
-                "file": {
-                    "formatter": "detailed",
-                    "class": "logging.handlers.RotatingFileHandler",
-                    "filename": log_file_path,
-                    "maxBytes": log_max_bytes,
-                    "backupCount": log_backup_count,
-                    "encoding": "utf-8",
-                },
+            "detailed": {
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             },
-            "loggers": {
-                # Configure all uvicorn related loggers
-                "uvicorn": {
-                    "handlers": ["console", "file"],
-                    "level": "INFO",
-                    "propagate": False,
-                },
-                "uvicorn.access": {
-                    "handlers": ["console", "file"],
-                    "level": "INFO",
-                    "propagate": False,
-                    "filters": ["path_filter"],
-                },
-                "uvicorn.error": {
-                    "handlers": ["console", "file"],
-                    "level": "INFO",
-                    "propagate": False,
-                },
-                "lightrag": {
-                    "handlers": ["console", "file"],
-                    "level": "INFO",
-                    "propagate": False,
-                    "filters": ["path_filter"],
-                },
+        },
+        "handlers": {
+            "console": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
             },
-            "filters": {
-                "path_filter": {
-                    "()": "lightrag.utils.LightragPathFilter",
-                },
+            "file": {
+                "formatter": "detailed",
+                "class": "logging.handlers.RotatingFileHandler",
+                "filename": log_file_path,
+                "maxBytes": log_max_bytes,
+                "backupCount": log_backup_count,
+                "encoding": "utf-8",
             },
-        }
-    )
+        },
+        "loggers": {
+            # Configure all uvicorn related loggers
+            "uvicorn": {
+                "handlers": ["console", "file"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["console", "file"],
+                "level": "INFO",
+                "propagate": False,
+                "filters": ["path_filter"],
+            },
+            "uvicorn.error": {
+                "handlers": ["console", "file"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "lightrag": {
+                "handlers": ["console", "file"],
+                "level": "INFO",
+                "propagate": False,
+                "filters": ["path_filter"],
+            },
+        },
+        "filters": {
+            "path_filter": {
+                "()": "lightrag.utils.LightragPathFilter",
+            },
+        },
+    })
 
 
 def check_and_install_dependencies():
@@ -658,12 +692,10 @@ def main():
     }
 
     if global_args.ssl:
-        uvicorn_config.update(
-            {
-                "ssl_certfile": global_args.ssl_certfile,
-                "ssl_keyfile": global_args.ssl_keyfile,
-            }
-        )
+        uvicorn_config.update({
+            "ssl_certfile": global_args.ssl_certfile,
+            "ssl_keyfile": global_args.ssl_keyfile,
+        })
 
     print(
         f"Starting Uvicorn server in single-process mode on {global_args.host}:{global_args.port}"

@@ -93,9 +93,9 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        from lightrag.llm.openai import gpt_4o_mini_complete
+        from lightrag.llm.langchain_gemini import langchain_gemini_2_0_flash_complete
 
-        result = await gpt_4o_mini_complete("How are you?")
+        result = await langchain_gemini_2_0_flash_complete("How are you?")
         print(result)
 
     asyncio.run(main())

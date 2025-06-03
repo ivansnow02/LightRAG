@@ -11,24 +11,28 @@ if not pm.is_installed("torch"):
     pm.install("torch")
 if not pm.is_installed("numpy"):
     pm.install("numpy")
+if not pm.is_installed("sentence-transformers"):
+    pm.install("sentence-transformers")
 
-from transformers import AutoTokenizer, AutoModelForCausalLM
+import numpy as np
+import torch
+from sentence_transformers import SentenceTransformer
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from lightrag.exceptions import (
     APIConnectionError,
-    RateLimitError,
     APITimeoutError,
+    RateLimitError,
 )
 from lightrag.utils import (
     locate_json_string_body_from_string,
 )
-import torch
-import numpy as np
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -50,9 +54,11 @@ def initialize_hf_model(model_name):
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type(
-        (RateLimitError, APIConnectionError, APITimeoutError)
-    ),
+    retry=retry_if_exception_type((
+        RateLimitError,
+        APIConnectionError,
+        APITimeoutError,
+    )),
 )
 async def hf_model_if_cache(
     model,
@@ -163,3 +169,38 @@ async def hf_embed(texts: list[str], tokenizer, embed_model) -> np.ndarray:
         return embeddings.detach().to(torch.float32).cpu().numpy()
     else:
         return embeddings.detach().cpu().numpy()
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((
+        RateLimitError,
+        APIConnectionError,
+        APITimeoutError,
+    )),
+)
+async def hf_st_embed(
+    texts: list[str], model_name: str = "paraphrase-multilingual-mpnet-base-v2"
+) -> np.ndarray:
+    """使用 sentence-transformers 模型生成文本嵌入向量
+
+    Args:
+        texts: 文本列表
+        model_name: sentence-transformers 模型名称，默认为 bge-m3
+
+    Returns:
+        np.ndarray: 嵌入向量数组
+    """
+    # Load model (with caching)
+    model = SentenceTransformer(model_name)
+
+    # Detect and use the best available device
+    if torch.cuda.is_available():
+        model = model.to(torch.device("cuda"))
+    elif torch.backends.mps.is_available():
+        model = model.to(torch.device("mps"))
+
+    # Generate embeddings
+    embeddings = model.encode(texts, convert_to_numpy=True)
+    return embeddings
