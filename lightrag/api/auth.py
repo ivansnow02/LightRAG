@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 import jwt
 from dotenv import load_dotenv
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Header
 from pydantic import BaseModel
+import requests
 
 from .config import global_args
 
@@ -107,3 +110,61 @@ class AuthHandler:
 
 
 auth_handler = AuthHandler()
+
+
+# !todo: Implement the login function
+async def get_current_user(token: str = None) -> dict:
+    """
+    Get the current user from the token.
+
+    Args:
+        token: JWT token
+
+    Returns:
+        dict: User information including username, role, and metadata
+
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    auth_service_url = "https://your-auth-backend.com/validate_token"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        response = requests.post(auth_service_url, headers=headers)
+        response.raise_for_status()  # Raises an exception for 4XX/5XX status
+
+        user_data = response.json()
+        user_id = user_data.get("user_id")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token or user_id missing",
+            )
+        return user_id
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Authentication service unavailable: {e}",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+async def mock_get_current_user_id(x_user_id: Optional[str] = Header(None, description="用于测试的用户ID")) -> str:
+    """
+    一个模拟的认证依赖项。
+    它从请求头 'X-User-ID' 中获取用户ID。
+    如果请求头不存在，它会返回一个默认的测试用户ID。
+    这允许我们在没有真实认证系统的情况下测试多租户功能。
+    """
+    if x_user_id:
+        logging.info(f"Simulating user login for: {x_user_id}")
+        return x_user_id
+    # 在生产环境中，如果令牌无效或缺失，您应该抛出 HTTPException(status_code=401)
+    logging.warning("X-User-ID header not found, using default 'test_user' for simulation.")
+    return "test_user"

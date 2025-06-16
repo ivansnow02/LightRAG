@@ -1,18 +1,19 @@
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-import logging
-import time
-import json
-import re
-from enum import Enum
-from fastapi.responses import StreamingResponse
 import asyncio
+import json
+import logging
+import re
+import time
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 from ascii_colors import trace_exception
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
 from lightrag import LightRAG, QueryParam
+from lightrag.api.utils_api import get_combined_auth_dependency, ollama_server_infos
 from lightrag.utils import TiktokenTokenizer
-from lightrag.api.utils_api import ollama_server_infos, get_combined_auth_dependency
-from fastapi import Depends
 
 
 # query mode according to query prefix (bypass is not LightRAG quer mode)
@@ -93,6 +94,54 @@ class OllamaModel(BaseModel):
 
 class OllamaTagResponse(BaseModel):
     models: List[OllamaModel]
+
+
+# MCP (Model Context Protocol) related models
+class MCPToolInput(BaseModel):
+    type: str = "object"
+    properties: Dict[str, Any]
+    required: Optional[List[str]] = None
+
+
+class MCPTool(BaseModel):
+    name: str
+    description: str
+    inputSchema: MCPToolInput
+
+
+class MCPListToolsResponse(BaseModel):
+    tools: List[MCPTool]
+
+
+class MCPCallToolRequest(BaseModel):
+    name: str
+    arguments: Dict[str, Any]
+
+
+class MCPTextContent(BaseModel):
+    type: str = "text"
+    text: str
+
+
+class MCPCallToolResponse(BaseModel):
+    content: List[MCPTextContent]
+
+
+class MCPInsertRequest(BaseModel):
+    text: str
+    description: Optional[str] = ""
+
+
+class MCPQueryRequest(BaseModel):
+    query: str
+    mode: Optional[str] = "hybrid"
+    only_need_context: Optional[bool] = False
+    top_k: Optional[int] = 60
+    user_prompt: Optional[str] = ""
+
+
+class MCPBatchInsertRequest(BaseModel):
+    documents: List[MCPInsertRequest]
 
 
 def estimate_tokens(text: str) -> int:
@@ -297,6 +346,7 @@ class OllamaAPI:
                                     }
                                     yield f"{json.dumps(final_data, ensure_ascii=False)}\n"
                                     return
+
                                 if first_chunk_time is None:
                                     first_chunk_time = start_time
                                 completion_tokens = estimate_tokens(total_response)

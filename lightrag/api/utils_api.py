@@ -1,22 +1,22 @@
 """
 Utility functions for the LightRAG API.
 """
-
+import logging
 import os
 import argparse
 from typing import Optional, List, Tuple
 import sys
 from ascii_colors import ASCIIColors
 from lightrag.api import __api_version__ as api_version
-from lightrag import __version__ as core_version
+from lightrag import LightRAG, __version__ as core_version
 from lightrag.constants import (
     DEFAULT_MAX_TOKEN_SUMMARY,
     DEFAULT_FORCE_LLM_SUMMARY_ON_MERGE,
 )
-from fastapi import HTTPException, Security, Request, status
+from fastapi import HTTPException, Security, Request, status, Depends
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from starlette.status import HTTP_403_FORBIDDEN
-from .auth import auth_handler
+from .auth import auth_handler, mock_get_current_user_id
 from .config import ollama_server_infos, global_args, get_env_value
 
 
@@ -335,3 +335,29 @@ def display_splash_screen(args: argparse.Namespace) -> None:
 
     # Ensure splash output flush to system log
     sys.stdout.flush()
+
+
+async def get_rag_for_user(request: Request, user_id: str = Depends(mock_get_current_user_id)) -> LightRAG:
+    """
+    工厂依赖项：为当前已认证的用户创建一个 LightRAG 实例。
+    这个函数现在是异步的，以正确初始化存储。
+    """
+    if not hasattr(request.app.state, 'rag_factory_config') or not request.app.state.rag_factory_config:
+        raise HTTPException(status_code=503, detail="Server configuration is not loaded yet.")
+
+    instance_config = request.app.state.rag_factory_config.copy()
+
+    instance_config["namespace_prefix"] = user_id
+
+    logging.debug(f"Creating RAG instance with namespace_prefix: {user_id}")
+
+    # 创建实例
+    rag_instance = LightRAG(**instance_config)
+
+    # --- START: 关键修复 ---
+    # 在返回实例之前，必须异步初始化它的所有存储。
+    # 这将确保每个用户命名空间下的存储（包括锁）都被正确创建。
+    await rag_instance.initialize_storages()
+    # --- END: 关键修复 ---
+
+    return rag_instance
