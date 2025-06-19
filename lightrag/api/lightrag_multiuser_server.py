@@ -26,10 +26,6 @@ from lightrag.api.utils_api import check_env_file, display_splash_screen
 from lightrag.utils import setup_logger, EmbeddingFunc
 from lightrag.types import GPTKeywordExtractionFormat
 
-# 假设您的认证逻辑位于这里
-# 您需要确保 get_current_user_id 函数能从请求中验证令牌并返回 user_id
-from lightrag.api.auth import mock_get_current_user_id
-
 load_dotenv(dotenv_path=".env", override=False)
 
 

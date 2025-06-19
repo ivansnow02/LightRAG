@@ -175,7 +175,7 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
     return router
 def create_graph_routes_with_multi_user():
 
-    @router.get("/graph/label/list")
+    @router.get("/graph/label/list/{user_id}")
     async def get_graph_labels(rag: LightRAG = Depends(get_rag_for_user)):
         """
         Get all graph labels
@@ -192,7 +192,7 @@ def create_graph_routes_with_multi_user():
                 status_code=500, detail=f"Error getting graph labels: {str(e)}"
             )
 
-    @router.get("/graphs")
+    @router.get("/graphs/{user_id}")
     async def get_knowledge_graph(
             label: str = Query(..., description="Label to get knowledge graph for"),
             max_depth: int = Query(3, description="Maximum depth of graph", ge=1),
@@ -226,7 +226,7 @@ def create_graph_routes_with_multi_user():
                 status_code=500, detail=f"Error getting knowledge graph: {str(e)}"
             )
 
-    @router.get("/graph/entity/exists")
+    @router.get("/graph/entity/exists/{user_id}")
     async def check_entity_exists(
             name: str = Query(..., description="Entity name to check"),
             rag: LightRAG = Depends(get_rag_for_user)
@@ -250,7 +250,7 @@ def create_graph_routes_with_multi_user():
                 status_code=500, detail=f"Error checking entity existence: {str(e)}"
             )
 
-    @router.post("/graph/entity/edit")
+    @router.post("/graph/entity/edit/{user_id}")
     async def update_entity(request: EntityUpdateRequest,rag: LightRAG = Depends(get_rag_for_user)):
         """
         Update an entity's properties in the knowledge graph
@@ -284,7 +284,7 @@ def create_graph_routes_with_multi_user():
                 status_code=500, detail=f"Error updating entity: {str(e)}"
             )
 
-    @router.post("/graph/relation/edit")
+    @router.post("/graph/relation/edit/{user_id}")
     async def update_relation(request: RelationUpdateRequest,rag: LightRAG = Depends(get_rag_for_user)):
         """Update a relation's properties in the knowledge graph
 

@@ -113,12 +113,12 @@ auth_handler = AuthHandler()
 
 
 # !todo: Implement the login function
-async def get_current_user(token: str = None) -> dict:
+async def get_current_user(Authorization: Optional[str] = Header(None, description="Authorization token")) -> str:
     """
     Get the current user from the token.
 
     Args:
-        token: JWT token
+        Authorization: token
 
     Returns:
         dict: User information including username, role, and metadata
@@ -126,33 +126,35 @@ async def get_current_user(token: str = None) -> dict:
     Raises:
         HTTPException: If token is invalid or expired
     """
-    auth_service_url = "https://your-auth-backend.com/validate_token"
-    headers = {"Authorization": f"Bearer {token}"}
+    # auth_service_url = "https://your-auth-backend.com/validate_token"
+    # headers = {"Authorization": f"Bearer {token}"}
+    #
+    # try:
+    #     response = requests.post(auth_service_url, headers=headers)
+    #     response.raise_for_status()  # Raises an exception for 4XX/5XX status
+    #
+    #     user_data = response.json()
+    #     user_id = user_data.get("user_id")
+    #
+    #     if not user_id:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_401_UNAUTHORIZED,
+    #             detail="Invalid token or user_id missing",
+    #         )
+    #     return user_id
+    # except requests.RequestException as e:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    #         detail=f"Authentication service unavailable: {e}",
+    #     )
+    # except Exception:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Could not validate credentials",
+    #         headers={"WWW-Authenticate": "Bearer"},
+    #     )
 
-    try:
-        response = requests.post(auth_service_url, headers=headers)
-        response.raise_for_status()  # Raises an exception for 4XX/5XX status
-
-        user_data = response.json()
-        user_id = user_data.get("user_id")
-
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token or user_id missing",
-            )
-        return user_id
-    except requests.RequestException as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Authentication service unavailable: {e}",
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    return "test_user"
 
 
 async def mock_get_current_user_id(x_user_id: Optional[str] = Header(None, description="用于测试的用户ID")) -> str:

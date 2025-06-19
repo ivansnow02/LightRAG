@@ -13,10 +13,10 @@ from lightrag.constants import (
     DEFAULT_MAX_TOKEN_SUMMARY,
     DEFAULT_FORCE_LLM_SUMMARY_ON_MERGE,
 )
-from fastapi import HTTPException, Security, Request, status, Depends
+from fastapi import HTTPException, Security, Request, status, Depends, Path
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from starlette.status import HTTP_403_FORBIDDEN
-from .auth import auth_handler, mock_get_current_user_id
+from .auth import auth_handler, get_current_user
 from .config import ollama_server_infos, global_args, get_env_value
 
 
@@ -337,7 +337,7 @@ def display_splash_screen(args: argparse.Namespace) -> None:
     sys.stdout.flush()
 
 
-async def get_rag_for_user(request: Request, user_id: str = Depends(mock_get_current_user_id)) -> LightRAG:
+async def get_rag_for_user(request: Request, user_id: str = Path(..., description="用户ID")) -> LightRAG:
     """
     工厂依赖项：为当前已认证的用户创建一个 LightRAG 实例。
     这个函数现在是异步的，以正确初始化存储。

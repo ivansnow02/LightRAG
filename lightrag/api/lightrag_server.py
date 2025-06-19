@@ -687,7 +687,7 @@ def main():
     uvicorn_config = {
         "app": app,  # Pass application instance directly instead of string path
         "host": global_args.host,
-        "port": global_args.port,
+        "port": 9876,
         "log_config": None,  # Disable default config
     }
 
