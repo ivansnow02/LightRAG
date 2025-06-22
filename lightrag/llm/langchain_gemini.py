@@ -5,7 +5,7 @@ import os
 import pipmaster as pm  # Pipmaster for dynamic library install
 
 from ..utils import VERBOSE_DEBUG, verbose_debug
-
+from langchain_core.rate_limiters import InMemoryRateLimiter
 # install specific modules
 if not pm.is_installed("langchain-google-genai"):
     pm.install("langchain-google-genai")
@@ -46,7 +46,11 @@ class InvalidResponseError(Exception):
 
     pass
 
-
+rate_limiter = InMemoryRateLimiter(
+    requests_per_second=0.25,  # <-- Super slow! We can only make a request once every 10 seconds!!
+    check_every_n_seconds=0.1,  # Wake up every 100 ms to check whether allowed to make a request,
+    max_bucket_size=10,  # Controls the maximum burst size.
+)
 def create_langchain_gemini_client(
     api_key: str | None = None,
     model_name: str = "gemini-1.5-flash",
@@ -81,7 +85,7 @@ def create_langchain_gemini_client(
         **kwargs,
     }
 
-    return ChatGoogleGenerativeAI(**client_configs)
+    return ChatGoogleGenerativeAI(**client_configs, rate_limiter=rate_limiter)
 
 
 @retry(

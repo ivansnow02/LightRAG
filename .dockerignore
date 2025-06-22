@@ -5,10 +5,7 @@ __pycache__
 # Virtual environment directories
 *.venv
 
-# Env
-env/
-*.env*
-.env_example
+
 
 # Distribution / build files
 site

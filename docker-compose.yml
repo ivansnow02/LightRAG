@@ -8,12 +8,12 @@ services:
       tags:
         - ghcr.io/hkuds/lightrag:latest
     ports:
-      - "${PORT:-9621}:9621"
+      - "${LIGHTRAG_PORT:-9621}:9621"
     volumes:
       - ./data/rag_storage:/app/data/rag_storage
       - ./data/inputs:/app/data/inputs
-      - ./config.ini:/app/config.ini
-      - ./.env:/app/.env
+      - ./config.ini:/app/config.ini:ro
+      - ./.env:/app/.env:ro
     env_file:
       - .env
     restart: unless-stopped
