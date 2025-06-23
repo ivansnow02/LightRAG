@@ -1378,7 +1378,7 @@ def create_document_routes_with_multi_user(
 ):
 
     @router.post(
-        "/scan/{user_id}", response_model=ScanResponse
+        "/scan/{course_id}", response_model=ScanResponse
     )
     async def scan_for_new_documents(background_tasks: BackgroundTasks, rag: LightRAG = Depends(get_rag_for_user)):
         """
@@ -1399,7 +1399,7 @@ def create_document_routes_with_multi_user(
         )
 
     @router.post(
-        "/upload/{user_id}", response_model=InsertResponse,
+        "/upload/{course_id}", response_model=InsertResponse,
     )
     async def upload_to_input_dir(
             background_tasks: BackgroundTasks, file: UploadFile = File(...), rag: LightRAG = Depends(get_rag_for_user)
@@ -1453,7 +1453,7 @@ def create_document_routes_with_multi_user(
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post(
-        "/text/{user_id}", response_model=InsertResponse
+        "/text/{course_id}", response_model=InsertResponse
     )
     async def insert_text(
             request: InsertTextRequest, background_tasks: BackgroundTasks, rag: LightRAG = Depends(get_rag_for_user)
@@ -1491,7 +1491,7 @@ def create_document_routes_with_multi_user(
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post(
-        "/texts/{user_id}",
+        "/texts/{course_id}",
         response_model=InsertResponse,
     )
     async def insert_texts(
@@ -1531,7 +1531,7 @@ def create_document_routes_with_multi_user(
 
     # TODO: deprecated, use /upload instead
     @router.post(
-        "/file/{user_id}", response_model=InsertResponse
+        "/file/{course_id}", response_model=InsertResponse
     )
     async def insert_file(
             background_tasks: BackgroundTasks, file: UploadFile = File(...), rag: LightRAG = Depends(get_rag_for_user)
@@ -1638,7 +1638,7 @@ def create_document_routes_with_multi_user(
     #         raise HTTPException(status_code=500, detail=str(e))
 
     @router.delete(
-        "/{user_id}", response_model=ClearDocumentsResponse
+        "/{course_id}", response_model=ClearDocumentsResponse
     )
     async def clear_documents(rag: LightRAG = Depends(get_rag_for_user)):
         """
@@ -1820,7 +1820,7 @@ def create_document_routes_with_multi_user(
                     pipeline_status["history_messages"].append(completion_msg)
 
     @router.get(
-        "/pipeline_status/{user_id}",
+        "/pipeline_status/{course_id}",
         response_model=PipelineStatusResponse,
     )
     async def get_pipeline_status(rag: LightRAG = Depends(get_rag_for_user)) -> PipelineStatusResponse:
@@ -1891,7 +1891,7 @@ def create_document_routes_with_multi_user(
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get(
-        "/{user_id}", response_model=DocsStatusesResponse
+        "/{course_id}", response_model=DocsStatusesResponse
     )
     async def documents(rag: LightRAG = Depends(get_rag_for_user)) -> DocsStatusesResponse:
         """
@@ -1947,7 +1947,7 @@ def create_document_routes_with_multi_user(
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post(
-        "/clear_cache/{user_id}",
+        "/clear_cache/{course_id}",
         response_model=ClearCacheResponse,
     )
     async def clear_cache(request: ClearCacheRequest,rag: LightRAG = Depends(get_rag_for_user)):

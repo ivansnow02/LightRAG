@@ -216,7 +216,7 @@ def create_query_routes(rag, api_key: Optional[str] = None, top_k: int = 60):
 def create_query_routes_with_multi_user(api_key: Optional[str] = None, top_k: int = 60):
 
     @router.post(
-        "/query/{user_id}",
+        "/query/{course_id}",
         response_model=QueryResponse,
     )
     async def query_text(request: QueryRequest, rag: LightRAG = Depends(get_rag_for_user),):
@@ -253,7 +253,7 @@ def create_query_routes_with_multi_user(api_key: Optional[str] = None, top_k: in
             logging.error(f"Error processing query for namespace {rag.namespace}: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/query/stream/{user_id}")
+    @router.post("/query/stream/{course_id}")
     async def query_text_stream(request: QueryRequest, rag: LightRAG = Depends(get_rag_for_user),):
         """
         This endpoint performs a retrieval-augmented generation (RAG) query and streams the response.

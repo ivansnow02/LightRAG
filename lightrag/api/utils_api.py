@@ -337,7 +337,7 @@ def display_splash_screen(args: argparse.Namespace) -> None:
     sys.stdout.flush()
 
 
-async def get_rag_for_user(request: Request, user_id: str = Path(..., description="用户ID")) -> LightRAG:
+async def get_rag_for_user(request: Request, course_id: str = Path(..., description="课程ID")) -> LightRAG:
     """
     工厂依赖项：为当前已认证的用户创建一个 LightRAG 实例。
     这个函数现在是异步的，以正确初始化存储。
@@ -347,9 +347,9 @@ async def get_rag_for_user(request: Request, user_id: str = Path(..., descriptio
 
     instance_config = request.app.state.rag_factory_config.copy()
 
-    instance_config["namespace_prefix"] = user_id
+    instance_config["namespace_prefix"] = course_id
 
-    logging.debug(f"Creating RAG instance with namespace_prefix: {user_id}")
+    logging.debug(f"Creating RAG instance with namespace_prefix: {course_id}")
 
     # 创建实例
     rag_instance = LightRAG(**instance_config)
