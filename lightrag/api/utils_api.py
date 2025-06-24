@@ -348,6 +348,9 @@ async def get_rag_for_user(request: Request, course_id: str = Path(..., descript
     instance_config = request.app.state.rag_factory_config.copy()
 
     instance_config["namespace_prefix"] = course_id
+    instance_config["working_dir"] = os.path.join(
+        instance_config["working_dir"], course_id
+    )
 
     logging.debug(f"Creating RAG instance with namespace_prefix: {course_id}")
 
