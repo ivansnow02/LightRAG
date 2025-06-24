@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
 
 # 假设这些是您的项目结构中的正确导入
 from lightrag import LightRAG
@@ -192,7 +194,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 或指定前端地址如 ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # --- 路由注册 ---
 # 初始化文档管理器 (这是无状态的，可以全局共享)
 doc_manager = DocumentManager(global_args.input_dir)

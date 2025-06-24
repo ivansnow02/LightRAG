@@ -2,6 +2,7 @@
 This module contains all document-related routes for the LightRAG API.
 """
 
+import os
 import asyncio
 from pyuca import Collator
 from lightrag.utils import logger
@@ -1402,7 +1403,10 @@ def create_document_routes_with_multi_user(
         "/upload/{course_id}", response_model=InsertResponse,
     )
     async def upload_to_input_dir(
-            background_tasks: BackgroundTasks, file: UploadFile = File(...), rag: LightRAG = Depends(get_rag_for_user)
+        course_id: str,
+        background_tasks: BackgroundTasks,
+        file: UploadFile = File(...),
+        rag: LightRAG = Depends(get_rag_for_user),
     ):
         """
         Upload a file to the input directory and index it.
@@ -1429,7 +1433,9 @@ def create_document_routes_with_multi_user(
                     detail=f"Unsupported file type. Supported types: {doc_manager.supported_extensions}",
                 )
 
-            file_path = doc_manager.input_dir / file.filename
+            file_root, file_ext = os.path.splitext(file.filename)
+            new_filename = f"{file_root}_{course_id}{file_ext}"
+            file_path = doc_manager.input_dir / new_filename
             # Check if file already exists
             if file_path.exists():
                 return InsertResponse(
